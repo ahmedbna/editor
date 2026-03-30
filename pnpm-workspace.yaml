@@ -1,0 +1,10 @@
+ignoredBuiltDependencies:
+  - electron-winstaller
+
+onlyBuiltDependencies:
+  - electron
+  - esbuild
+  - node-pty
+
+packages:
+  - 'bna-agent'
