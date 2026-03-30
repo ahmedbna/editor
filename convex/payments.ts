@@ -52,7 +52,7 @@ export const createCheckout = action({
             ? { customer: { customer_id: args.user.dodoCustomerId } }
             : {
                 customer: {
-                  email: args.user.email,
+                  email: args.user.email!,
                   name: args.user.name || args.user.email?.split('@')[0], // Dodo requires a name, so we use the part of the email before the @
                 },
               }),
@@ -101,7 +101,9 @@ export const getCustomerPortal = action({
       return portal;
     } catch (error) {
       console.error('Failed to generate customer portal link', error);
-      throw new Error('Unable to generate customer portal link. Please try again.');
+      throw new Error(
+        'Unable to generate customer portal link. Please try again.',
+      );
     }
   },
 });

@@ -99,6 +99,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Auth
   auth: {
     login: () => ipcRenderer.invoke('auth:login'),
+    cancelLogin: () => ipcRenderer.invoke('auth:cancelLogin'),
     logout: () => ipcRenderer.invoke('auth:logout'),
     setToken: (token: string) => ipcRenderer.invoke('auth:setToken', token),
     getToken: () => ipcRenderer.invoke('auth:getToken'),
@@ -108,6 +109,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
       const h = (_: any, t: string) => cb(t);
       ipcRenderer.on('auth:tokenReceived', h);
       return () => ipcRenderer.removeListener('auth:tokenReceived', h);
+    },
+    onError: (cb: (err: string) => void) => {
+      const h = (_: any, e: string) => cb(e);
+      ipcRenderer.on('auth:error', h);
+      return () => ipcRenderer.removeListener('auth:error', h);
     },
   },
 

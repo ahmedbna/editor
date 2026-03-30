@@ -1,35 +1,58 @@
-// src/components/auth/LoginPage.tsx
+// src/components/auth/login-page.tsx
 import { useState, useEffect } from 'react';
-import { Zap, Key, ExternalLink, Loader2 } from 'lucide-react';
+import {
+  Zap,
+  ExternalLink,
+  Loader2,
+  AlertCircle,
+  RotateCcw,
+} from 'lucide-react';
 
 interface Props {
   onAuth: () => void;
 }
 
 export function LoginPage({ onAuth }: Props) {
-  const [apiKey, setApiKey] = useState('');
   const [loading, setLoading] = useState(false);
-  const [mode, setMode] = useState<'choose' | 'apikey' | 'convex'>('choose');
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const cleanup = window.electronAPI.auth.onTokenReceived(() => {
+    // Listen for successful auth token
+    const cleanupToken = window.electronAPI.auth.onTokenReceived(() => {
+      setLoading(false);
+      setError(null);
       onAuth();
     });
-    return cleanup;
+
+    // Listen for auth errors (e.g. timeout from polling)
+    const cleanupError = window.electronAPI.ai.onError?.((err: string) => {
+      if (err.includes('Login timed out')) {
+        setLoading(false);
+        setError('Login timed out. Please try again.');
+      }
+    });
+
+    return () => {
+      cleanupToken();
+      cleanupError?.();
+    };
   }, [onAuth]);
 
-  const handleApiKeyLogin = async () => {
-    if (!apiKey.trim()) return;
+  const handleLogin = async () => {
     setLoading(true);
-    await window.electronAPI.settings.setApiKey(apiKey.trim());
-    await window.electronAPI.auth.setToken('apikey-mode');
-    setLoading(false);
-    onAuth();
+    setError(null);
+    await window.electronAPI.auth.login();
   };
 
-  const handleConvexLogin = async () => {
-    setLoading(true);
-    await window.electronAPI.auth.login();
+  const handleCancel = async () => {
+    setLoading(false);
+    setError(null);
+    // Cancel the polling in the main process
+    try {
+      await (window.electronAPI.auth as any).cancelLogin?.();
+    } catch {
+      // cancelLogin may not exist on older preload versions
+    }
   };
 
   return (
@@ -63,10 +86,54 @@ export function LoginPage({ onAuth }: Props) {
           </p>
         </div>
 
-        {mode === 'choose' && (
-          <div className='space-y-3'>
+        {/* Error message */}
+        {error && (
+          <div className='mb-4 p-3 rounded-lg bg-[#ff5c5710] border border-[#ff5c5730] flex items-start gap-2'>
+            <AlertCircle size={14} className='text-[#ff5c57] mt-0.5 shrink-0' />
+            <p className='text-xs text-[#ff5c57]'>{error}</p>
+          </div>
+        )}
+
+        {loading ? (
+          <div className='space-y-4'>
+            <div className='text-center py-8'>
+              <Loader2
+                size={28}
+                className='animate-spin text-[#FAD40B] mx-auto mb-4'
+              />
+              <p className='text-sm text-[#888] mb-1'>Waiting for sign-in...</p>
+              <p className='text-xs text-[#444]'>
+                Complete login in your browser.
+              </p>
+              <p className='text-xs text-[#333] mt-3'>
+                A browser window should have opened. Sign in with your Google or
+                GitHub account.
+              </p>
+            </div>
+
+            <div className='flex flex-col gap-2'>
+              <button
+                onClick={handleLogin}
+                className='w-full h-10 rounded-xl bg-[#111] border border-[#222] text-[#888] font-medium text-xs
+                           flex items-center justify-center gap-2 hover:bg-[#1a1a1a] hover:text-white
+                           transition-all'
+              >
+                <RotateCcw size={12} />
+                Reopen Browser
+              </button>
+
+              <button
+                onClick={handleCancel}
+                className='w-full text-[#555] text-xs hover:text-[#888] transition-colors py-2'
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className='space-y-4'>
             <button
-              onClick={() => setMode('convex')}
+              onClick={handleLogin}
               className='w-full h-14 rounded-xl bg-[#FAD40B] text-black font-bold text-sm
                          flex items-center justify-center gap-2 hover:bg-[#e5c200]
                          active:scale-[0.98] transition-all'
@@ -75,124 +142,11 @@ export function LoginPage({ onAuth }: Props) {
               Sign in with BNA Account
             </button>
 
-            <div className='flex items-center gap-3 text-[#333]'>
-              <div className='flex-1 h-px bg-[#1a1a1a]' />
-              <span className='text-[10px] uppercase tracking-wider'>or</span>
-              <div className='flex-1 h-px bg-[#1a1a1a]' />
-            </div>
-
-            <button
-              onClick={() => setMode('apikey')}
-              className='w-full h-12 rounded-xl bg-[#111] border border-[#222] text-[#888] font-medium text-sm
-                         flex items-center justify-center gap-2 hover:bg-[#1a1a1a] hover:text-white
-                         active:scale-[0.98] transition-all'
-            >
-              <Key size={14} />
-              Use your own API Key
-            </button>
-
             <p className='text-[10px] text-[#333] text-center mt-4'>
-              BNA Account includes credits and project sync.
+              Sign in with your Google or GitHub account.
               <br />
-              API Key mode uses your Anthropic key directly.
+              This will open your browser.
             </p>
-          </div>
-        )}
-
-        {mode === 'convex' && (
-          <div className='space-y-4'>
-            {loading ? (
-              <div className='text-center py-8'>
-                <Loader2
-                  size={24}
-                  className='animate-spin text-[#FAD40B] mx-auto mb-3'
-                />
-                <p className='text-sm text-[#888]'>Waiting for sign-in...</p>
-                <p className='text-xs text-[#444] mt-1'>
-                  Complete login in your browser
-                </p>
-              </div>
-            ) : (
-              <>
-                <p className='text-xs text-[#666] text-center'>
-                  This will open your browser to sign in with Google or GitHub.
-                </p>
-                <button
-                  onClick={handleConvexLogin}
-                  className='w-full h-12 rounded-xl bg-[#FAD40B] text-black font-bold text-sm
-                             flex items-center justify-center gap-2 hover:bg-[#e5c200] transition-colors'
-                >
-                  <ExternalLink size={16} />
-                  Open Browser to Sign In
-                </button>
-              </>
-            )}
-            <button
-              onClick={() => {
-                setMode('choose');
-                setLoading(false);
-              }}
-              className='w-full text-[#555] text-xs hover:text-[#888] transition-colors'
-            >
-              ← Back
-            </button>
-          </div>
-        )}
-
-        {mode === 'apikey' && (
-          <div className='space-y-4'>
-            <div>
-              <label className='text-[10px] text-[#555] uppercase tracking-wider font-semibold block mb-1.5'>
-                Anthropic API Key
-              </label>
-              <input
-                type='password'
-                value={apiKey}
-                onChange={(e) => setApiKey(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && handleApiKeyLogin()}
-                placeholder='sk-ant-api03-...'
-                className='w-full bg-[#111] border border-[#222] rounded-lg px-3 py-2.5 text-sm text-[#ccc]
-                           focus:border-[#FAD40B33] transition-colors placeholder:text-[#333]'
-                autoFocus
-              />
-            </div>
-
-            <button
-              onClick={handleApiKeyLogin}
-              disabled={!apiKey.trim() || loading}
-              className='w-full h-11 rounded-xl bg-[#FAD40B] text-black font-bold text-sm
-                         flex items-center justify-center gap-2 hover:bg-[#e5c200]
-                         disabled:opacity-30 disabled:cursor-not-allowed transition-all'
-            >
-              {loading ? (
-                <Loader2 size={14} className='animate-spin' />
-              ) : (
-                <Key size={14} />
-              )}
-              Continue with API Key
-            </button>
-
-            <p className='text-[10px] text-[#333] text-center'>
-              Your key is stored locally and never sent to BNA servers.
-              <br />
-              <button
-                onClick={() =>
-                  window.electronAPI.shell.openExternal(
-                    'https://console.anthropic.com/settings/keys',
-                  )
-                }
-                className='text-[#FAD40B55] hover:text-[#FAD40B] transition-colors underline'
-              >
-                Get an API key from Anthropic →
-              </button>
-            </p>
-
-            <button
-              onClick={() => setMode('choose')}
-              className='w-full text-[#555] text-xs hover:text-[#888] transition-colors'
-            >
-              ← Back
-            </button>
           </div>
         )}
       </div>

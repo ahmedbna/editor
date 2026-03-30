@@ -24,32 +24,43 @@ export default function App() {
       setCheckingAuth(false);
       return;
     }
-    // Check existing auth
-    window.electronAPI.auth.getToken().then((token) => {
-      setIsAuthenticated(!!token);
+
+    // Check existing auth token
+    window.electronAPI.auth.getToken().then(async (token) => {
+      if (token) {
+        // Validate the token by trying to get the user
+        const user = await window.electronAPI.auth.getUser();
+        if (user) {
+          setIsAuthenticated(true);
+        } else {
+          // Token is invalid/expired — clear it
+          await window.electronAPI.auth.logout();
+          setIsAuthenticated(false);
+        }
+      }
       setCheckingAuth(false);
     });
+
     // Check for saved project
     window.electronAPI.project.getCurrent().then((p) => {
       if (p) setProjectPath(p);
     });
-    // Listen for auth callback
+
+    // Listen for auth callback (deep link or polling)
     const cleanup = window.electronAPI.auth.onTokenReceived(() => {
       setIsAuthenticated(true);
     });
+
     return cleanup;
   }, []);
 
   // Keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Cmd/Ctrl + B: Toggle sidebar (future)
-      // Cmd/Ctrl + J: Toggle terminal
       if ((e.metaKey || e.ctrlKey) && e.key === 'j') {
         e.preventDefault();
         setShowTerminal((v) => !v);
       }
-      // Cmd/Ctrl + L: Toggle chat
       if ((e.metaKey || e.ctrlKey) && e.key === 'l') {
         e.preventDefault();
         setShowChat((v) => !v);

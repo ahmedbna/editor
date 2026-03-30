@@ -62,10 +62,7 @@ declare global {
       };
       project: {
         open: () => Promise<string | null>;
-        create: (opts: {
-          name: string;
-          path: string;
-        }) => Promise<{
+        create: (opts: { name: string; path: string }) => Promise<{
           success: boolean;
           projectPath?: string;
           error?: string;
@@ -88,7 +85,8 @@ declare global {
         getApiKey: () => Promise<string>;
       };
       auth: {
-        login: () => Promise<void>;
+        login: () => Promise<string>;
+        cancelLogin: () => Promise<void>;
         logout: () => Promise<void>;
         setToken: (token: string) => Promise<void>;
         getToken: () => Promise<string | null>;
@@ -98,6 +96,7 @@ declare global {
           totalCreditsUsed: number;
         } | null>;
         onTokenReceived: (cb: (token: string) => void) => () => void;
+        onError: (cb: (err: string) => void) => () => void;
       };
       shell: {
         openExternal: (url: string) => Promise<void>;

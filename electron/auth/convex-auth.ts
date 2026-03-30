@@ -1,9 +1,11 @@
 // electron/auth/convex-auth.ts
 import { IpcMain, BrowserWindow, shell } from 'electron';
 import Store from 'electron-store';
+import crypto from 'crypto';
 
 interface StoreSchema {
   convexAuthToken: string;
+  authSessionId: string;
 }
 
 const store = new Store<StoreSchema>();
@@ -12,17 +14,99 @@ const CONVEX_URL =
   process.env.CONVEX_URL || 'https://your-deployment.convex.cloud';
 const AUTH_URL = process.env.AUTH_URL || 'https://ai.ahmedbna.com';
 
+// Polling interval and timeout for auth callback
+const POLL_INTERVAL_MS = 2000;
+const POLL_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
+
+let pollTimer: ReturnType<typeof setInterval> | null = null;
+
+function stopPolling() {
+  if (pollTimer) {
+    clearInterval(pollTimer);
+    pollTimer = null;
+  }
+}
+
 export function setupAuthHandlers(
   ipcMain: IpcMain,
   getWindow: () => BrowserWindow | null,
 ) {
   ipcMain.handle('auth:login', async () => {
-    const loginUrl = `${AUTH_URL}?desktop=true&redirect=bna-desktop://auth-callback`;
+    // Generate a unique session ID for this login attempt
+    const sessionId = crypto.randomUUID();
+    store.set('authSessionId', sessionId);
+
+    // Open the browser with:
+    // - desktop=true: tells the web app this is a desktop login
+    // - redirect=bna-desktop://auth-callback: the deep link to redirect back to
+    // - session_id: unique ID for polling fallback
+    const loginUrl = `${AUTH_URL}?desktop=true&redirect=${encodeURIComponent('bna-desktop://auth-callback')}&session_id=${sessionId}`;
     await shell.openExternal(loginUrl);
+
+    // Start polling as a fallback in case deep links don't work
+    // The web app should store the token at a known endpoint keyed by session_id
+    stopPolling();
+    const startTime = Date.now();
+
+    pollTimer = setInterval(async () => {
+      // Stop polling after timeout
+      if (Date.now() - startTime > POLL_TIMEOUT_MS) {
+        stopPolling();
+        const window = getWindow();
+        if (window) {
+          window.webContents.send(
+            'auth:error',
+            'Login timed out. Please try again.',
+          );
+        }
+        return;
+      }
+
+      // Check if token was already received via deep link
+      const existingToken = store.get('convexAuthToken');
+      if (existingToken && existingToken !== 'apikey-mode') {
+        stopPolling();
+        return;
+      }
+
+      // Poll the web app for the token
+      try {
+        const response = await fetch(
+          `${AUTH_URL}/api/desktop-auth?session_id=${sessionId}`,
+          {
+            method: 'GET',
+            headers: { 'Content-Type': 'application/json' },
+          },
+        );
+
+        if (response.ok) {
+          const data = await response.json();
+          if (data.token) {
+            store.set('convexAuthToken', data.token);
+            const window = getWindow();
+            if (window) {
+              window.webContents.send('auth:tokenReceived', data.token);
+              if (window.isMinimized()) window.restore();
+              window.focus();
+            }
+            stopPolling();
+          }
+        }
+      } catch {
+        // Polling failed — will retry on next interval
+      }
+    }, POLL_INTERVAL_MS);
+
+    return sessionId;
+  });
+
+  ipcMain.handle('auth:cancelLogin', () => {
+    stopPolling();
   });
 
   ipcMain.handle('auth:setToken', (_, token: string) => {
     store.set('convexAuthToken', token);
+    stopPolling();
   });
 
   ipcMain.handle('auth:getToken', () => {
@@ -31,7 +115,7 @@ export function setupAuthHandlers(
 
   ipcMain.handle('auth:getUser', async () => {
     const token = store.get('convexAuthToken');
-    if (!token || token === 'apikey-mode') return null;
+    if (!token) return null;
 
     try {
       const response = await fetch(`${CONVEX_URL}/api/query`, {
@@ -57,7 +141,7 @@ export function setupAuthHandlers(
 
   ipcMain.handle('auth:getCredits', async () => {
     const token = store.get('convexAuthToken');
-    if (!token || token === 'apikey-mode') return null;
+    if (!token) return null;
 
     try {
       const response = await fetch(`${CONVEX_URL}/api/query`, {
@@ -83,5 +167,6 @@ export function setupAuthHandlers(
 
   ipcMain.handle('auth:logout', () => {
     store.delete('convexAuthToken');
+    stopPolling();
   });
 }
