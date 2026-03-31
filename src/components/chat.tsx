@@ -68,13 +68,8 @@ export function Chat({ projectPath, onFileOpen }: Props) {
     output: 0,
   });
   const [showSettings, setShowSettings] = useState(false);
-  const [apiKey, setApiKey] = useState('');
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
-
-  useEffect(() => {
-    window.electronAPI.settings.getApiKey().then(setApiKey);
-  }, []);
 
   useEffect(() => {
     const cleanups = [
@@ -181,12 +176,6 @@ export function Chat({ projectPath, onFileOpen }: Props) {
     setTotalTokens({ input: 0, output: 0 });
   }, []);
 
-  const saveApiKey = useCallback(async () => {
-    await window.electronAPI.settings.setApiKey(apiKey);
-    setShowSettings(false);
-    toast.success('API key saved');
-  }, [apiKey]);
-
   // Auto-resize textarea
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     setInput(e.target.value);
@@ -235,33 +224,6 @@ export function Chat({ projectPath, onFileOpen }: Props) {
         </div>
       </div>
 
-      {/* Settings panel */}
-      {showSettings && (
-        <div className='border-b border-[#1a1a1a] p-3 bg-[#0d0d0d]'>
-          <label className='text-[10px] text-[#555] uppercase tracking-wider font-semibold'>
-            Anthropic API Key
-          </label>
-          <div className='flex gap-2 mt-1.5'>
-            <input
-              type='password'
-              value={apiKey}
-              onChange={(e) => setApiKey(e.target.value)}
-              placeholder='sk-ant-...'
-              className='flex-1 bg-[#111] border border-[#222] rounded px-2 py-1 text-xs text-[#ccc] focus:border-[#FAD40B33] transition-colors'
-            />
-            <button
-              onClick={saveApiKey}
-              className='px-2 py-1 rounded bg-[#FAD40B] text-black text-xs font-medium'
-            >
-              Save
-            </button>
-          </div>
-          <p className='text-[9px] text-[#444] mt-2'>
-            Your key is stored locally and never sent to BNA servers.
-          </p>
-        </div>
-      )}
-
       {/* Messages */}
       <div ref={scrollRef} className='flex-1 overflow-y-auto p-3 space-y-2.5'>
         {messages.length === 0 && !streaming && (
@@ -275,14 +237,6 @@ export function Chat({ projectPath, onFileOpen }: Props) {
               <br />
               It can create files, edit code, run commands, and deploy.
             </p>
-            {!apiKey && (
-              <button
-                onClick={() => setShowSettings(true)}
-                className='mt-3 text-[10px] text-[#FAD40B55] hover:text-[#FAD40B] transition-colors'
-              >
-                Set up your API key to get started →
-              </button>
-            )}
           </div>
         )}
 

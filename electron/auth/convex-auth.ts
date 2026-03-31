@@ -36,15 +36,13 @@ export function setupAuthHandlers(
     const sessionId = crypto.randomUUID();
     store.set('authSessionId', sessionId);
 
-    // Open the browser with:
-    // - desktop=true: tells the web app this is a desktop login
-    // - redirect=bna-desktop://auth-callback: the deep link to redirect back to
-    // - session_id: unique ID for polling fallback
-    const loginUrl = `${AUTH_URL}?desktop=true&redirect=${encodeURIComponent('bna-desktop://auth-callback')}&session_id=${sessionId}`;
+    // Open the DEDICATED desktop login route (not the homepage).
+    // This route handles both already-authenticated and unauthenticated users.
+    const loginUrl = `${AUTH_URL}/desktop-login?session_id=${encodeURIComponent(sessionId)}&redirect=${encodeURIComponent('bna-desktop://auth-callback')}`;
     await shell.openExternal(loginUrl);
 
     // Start polling as a fallback in case deep links don't work
-    // The web app should store the token at a known endpoint keyed by session_id
+    // The web app stores the token in Convex keyed by session_id
     stopPolling();
     const startTime = Date.now();
 
